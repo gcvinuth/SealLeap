@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Seal Leap</title>
+<meta name="description" content="Seal Leap - a flat-vector arcade game. Hop the seal across the ocean pads!">
+<meta name="theme-color" content="#0f4c5c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Seal Leap">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --card: rgba(29,53,87,.85); --emerald:#06d6a0; --cyan:#4cc9f0; --ice:#e0fbfc; --ink:#2b2d42; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #0f4c5c;
+    font-family: 'Nunito', 'Montserrat', 'Segoe UI', system-ui, sans-serif; color: #fff;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; overscroll-behavior: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #safe { position: fixed; top: 0; left: 0; visibility: hidden; pointer-events: none; padding-top: env(safe-area-inset-top); }
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 5; animation: fade .3s ease;
+  }
+  .overlay.hidden { display: none; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pop { from { transform: scale(.85); } to { transform: scale(1); } }
+  .card {
+    background: var(--card); border-radius: 28px; padding: 28px 26px 26px; text-align: center;
+    width: min(340px, 100%); box-shadow: 0 14px 0 rgba(8,30,44,.35); backdrop-filter: blur(4px);
+    animation: pop .35s cubic-bezier(.2,1.4,.4,1);
+  }
+  h1 { margin: 0 0 4px; font-size: 44px; font-weight: 900; letter-spacing: .5px; line-height: 1; }
+  h1 span { color: var(--emerald); }
+  h2 { margin: 0 0 6px; font-size: 32px; font-weight: 900; }
+  p { margin: 10px 0; font-size: 15px; line-height: 1.4; font-weight: 700; opacity: .92; }
+  .legend { display: flex; flex-direction: column; gap: 6px; margin: 14px 0 6px; text-align: left; font-size: 13px; font-weight: 700; }
+  .legend div { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 22px; height: 12px; border-radius: 50%; flex: none; border-bottom: 4px solid rgba(0,0,0,.25); }
+  .big { font-size: 64px; font-weight: 900; line-height: 1; margin: 6px 0; }
+  .best { font-size: 14px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; opacity: .85; margin-bottom: 14px; }
+  .badge { display: inline-block; background: #ffd166; color: var(--ink); font-weight: 900; font-size: 13px; padding: 4px 12px; border-radius: 99px; margin-bottom: 8px; letter-spacing: 1px; }
+  .badge.hidden { display: none; }
+  .btn {
+    appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 900; font-size: 22px;
+    color: var(--ink); background: var(--emerald); padding: 14px 40px; border-radius: 99px;
+    box-shadow: 0 6px 0 #049a75; transition: transform .08s, box-shadow .08s; margin-top: 8px;
+  }
+  .btn:active { transform: translateY(5px); box-shadow: 0 1px 0 #049a75; }
+  .round {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); z-index: 6;
+    width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer;
+    background: rgba(29,53,87,.7); display: grid; place-items: center; padding: 0;
+  }
+  #mute { right: 12px; } #vib { right: 64px; }
+  .round svg { width: 24px; height: 24px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .round .x { display: none; }
+  .round.off .on { display: none; }
+  .round.off .x { display: block; }
+  .round.off { opacity: .7; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe"></div>
+
+<button id="vib" class="round" aria-label="Toggle haptics">
+  <svg viewBox="0 0 24 24"><rect x="8" y="3" width="8" height="18" rx="2" fill="#fff" stroke="none"/><path class="on" d="M4.5 8v8M19.5 8v8M2 10.5v3M22 10.5v3"/><path class="x" d="M3 3l18 18" stroke="#ff8fa3"/></svg>
+</button>
+<button id="mute" class="round" aria-label="Toggle sound">
+  <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="#fff"/><path class="on" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="x" d="M17 9l5 6M22 9l-5 6"/></svg>
+</button>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <h1>Seal <span>Leap</span></h1>
+    <p>Tap to leap to the next pad.<br>Hold to charge a longer jump.</p>
+    <div class="legend">
+      <div><i class="dot" style="background:#06d6a0"></i> Green pad &ndash; glides side to side</div>
+      <div><i class="dot" style="background:#4cc9f0"></i> Cyan spring &ndash; launches 2+ pads</div>
+      <div><i class="dot" style="background:#e0fbfc"></i> Ice floe &ndash; melts, don't linger!</div>
+    </div>
+    <p style="font-size:13px;margin-top:10px">Leap when the next pad is lined up above you &ndash; the seal steers in mid-air. Land in the bullseye to build a combo (up to 5&times;).</p>
+    <div class="best">Best: <span id="bestMenu">0</span></div>
+    <button id="play" class="btn">Play</button>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="card">
+    <h2>Splash!</h2>
+    <div id="newBest" class="badge hidden">NEW BEST!</div>
+    <div class="big" id="finalScore">0</div>
+    <div class="best">Best: <span id="bestOver">0</span></div>
+    <button id="retry" class="btn">Retry</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ======================================================================
+   PWA: manifest (blob), generated icons, service worker registration
+   ====================================================================== */
+function makeIcon(size) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'), u = size;
+  const bg = g.createLinearGradient(0, 0, 0, u);
+  bg.addColorStop(0, '#0f4c5c'); bg.addColorStop(1, '#1f8a70');
+  g.fillStyle = bg; g.fillRect(0, 0, u, u);
+  g.fillStyle = 'rgba(255,255,255,.07)';
+  g.beginPath(); g.arc(u * .2, u * .22, u * .16, 0, 7); g.fill();
+  g.beginPath(); g.arc(u * .85, u * .3, u * .09, 0, 7); g.fill();
+  g.fillStyle = '#049a75'; g.beginPath(); g.ellipse(u * .5, u * .8, u * .27, u * .085, 0, 0, 7); g.fill();
+  g.fillStyle = '#06d6a0'; g.beginPath(); g.ellipse(u * .5, u * .775, u * .27, u * .085, 0, 0, 7); g.fill();
+  const body = () => { g.beginPath(); g.ellipse(u * .5, u * .62, u * .15, u * .17, 0, 0, 7); };
+  const head = () => { g.beginPath(); g.arc(u * .5, u * .45, u * .125, 0, 7); };
+  g.fillStyle = g.strokeStyle = '#2b2d42'; g.lineWidth = u * .05;
+  body(); g.stroke(); head(); g.stroke();
+  g.fillStyle = '#e0e6ed'; body(); g.fill(); head(); g.fill();
+  g.fillStyle = '#f8fafc'; g.beginPath(); g.ellipse(u * .5, u * .64, u * .09, u * .12, 0, 0, 7); g.fill();
+  g.fillStyle = '#111'; [-1, 1].forEach(d => { g.beginPath(); g.arc(u * (.5 + d * .05), u * .43, u * .02, 0, 7); g.fill(); });
+  g.fillStyle = '#2b2d42'; g.beginPath(); g.ellipse(u * .5, u * .48, u * .035, u * .024, 0, 0, 7); g.fill();
+  g.fillStyle = '#ff8fa3'; [-1, 1].forEach(d => { g.beginPath(); g.arc(u * (.5 + d * .092), u * .48, u * .028, 0, 7); g.fill(); });
+  return c.toDataURL('image/png');
+}
+try {
+  const icon192 = makeIcon(192), icon512 = makeIcon(512);
+  const base = location.href.split('#')[0].split('?')[0];
+  const manifest = {
+    name: 'Seal Leap', short_name: 'Seal Leap',
+    description: 'Flat-vector arcade game: hop the seal across the ocean pads.',
+    start_url: base, scope: new URL('./', base).href,
+    display: 'standalone', orientation: 'portrait',
+    background_color: '#0f4c5c', theme_color: '#0f4c5c',
+    icons: [
+      { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+      { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+    ]
+  };
+  const mLink = document.createElement('link');
+  mLink.rel = 'manifest';
+  mLink.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+  document.head.appendChild(mLink);
+  const aLink = document.createElement('link'); aLink.rel = 'apple-touch-icon'; aLink.href = icon192;
+  document.head.appendChild(aLink);
+  const fLink = document.createElement('link'); fLink.rel = 'icon'; fLink.type = 'image/png'; fLink.href = icon192;
+  document.head.appendChild(fLink);
+} catch (e) { console.warn('Manifest setup failed', e); }
+
+/* Offline support: page-level precache + service worker (sw.js must sit beside this file,
+   because browsers refuse inline/blob service worker scripts). */
+if ('caches' in window && location.protocol.startsWith('http')) {
+  caches.open('seal-leap-v2').then(c => c.add(location.href.split('#')[0]).catch(() => {})).catch(() => {});
+}
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {
+      console.info('Seal Leap: sw.js not found next to index.html - offline caching via service worker disabled.');
+    });
+  });
+}
+
+/* ======================================================================
+   Haptics
+   Android/Chrome: navigator.vibrate patterns.
+   iOS Safari 18+: no vibrate API, so we toggle a hidden <input switch>, which gives a
+   system tick (best effort - iOS only allows this from touch gestures).
+   ====================================================================== */
+const hap = (() => {
+  let on = true;
+  try { on = localStorage.getItem('sealLeapHaptics') !== '0'; } catch (e) {}
+  const canVib = typeof navigator.vibrate === 'function';
+  const lab = document.createElement('label');
+  lab.setAttribute('aria-hidden', 'true');
+  lab.style.cssText = 'position:fixed;left:-99px;top:-99px;width:1px;height:1px;opacity:0;pointer-events:none';
+  const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', '');
+  inp.tabIndex = -1; lab.appendChild(inp); document.body.appendChild(lab);
+  const btn = document.getElementById('vib');
+  const sync = () => btn.classList.toggle('off', !on);
+  sync();
+  function fire(p) {
+    if (!on) return;
+    if (canVib) { try { navigator.vibrate(p); } catch (e) {} }
+    else { try { lab.click(); } catch (e) {} }
+  }
+  btn.addEventListener('click', () => {
+    on = !on; sync();
+    try { localStorage.setItem('sealLeapHaptics', on ? '1' : '0'); } catch (e) {}
+    if (on) fire([18]);
+  });
+  return {
+    tick(k)    { fire([6 + k * 3]); },                     // charge ring filled (k = 2,3)
+    warn(n)    { fire([n >= 3 ? 14 : 6]); },               // ice melting countdown
+    launch()   { fire([10]); },
+    land()     { fire([22]); },
+    edge()     { fire([14, 40, 14]); },                    // close call
+    spring()   { fire([12, 22, 40]); },
+    perfect(n) {                                           // one pulse per combo level, rising strength
+      const p = [];
+      for (let i = 0; i < n; i++) { p.push(14 + i * 5); if (i < n - 1) p.push(24); }
+      fire(p);
+    },
+    splash()   { fire([80, 45, 120, 45, 60]); }
+  };
+})();
+
+/* ======================================================================
+   Audio (Web Audio synthesis, no files)
+   ====================================================================== */
+const sfx = (() => {
+  let ac = null, master = null, muted = false;
+  try { muted = localStorage.getItem('sealLeapMuted') === '1'; } catch (e) {}
+  const btn = document.getElementById('mute');
+  const sync = () => btn.classList.toggle('off', muted);
+  sync();
+  btn.addEventListener('click', () => {
+    muted = !muted; sync();
+    try { localStorage.setItem('sealLeapMuted', muted ? '1' : '0'); } catch (e) {}
+    init();
+  });
+  function init() {
+    if (!ac) {
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        master = ac.createGain(); master.gain.value = .55; master.connect(ac.destination);
+      } catch (e) { ac = null; }
+    }
+    if (ac && ac.state === 'suspended') ac.resume();
+  }
+  function tone(o) {
+    if (!ac || muted) return;
+    const t0 = ac.currentTime + (o.delay || 0), dur = o.dur || .15, vol = o.vol || .3;
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(o.f0, t0);
+    if (o.f1) osc.frequency.exponentialRampToValueAtTime(o.f1, t0 + dur);
+    g.gain.setValueAtTime(.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + .012);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+    osc.connect(g); g.connect(master);
+    osc.start(t0); osc.stop(t0 + dur + .05);
+  }
+  const notes = [523.25, 587.33, 659.25, 783.99, 880, 1046.5];
+  return {
+    init,
+    pop()    { tone({ f0: 320, f1: 110, dur: .14, type: 'triangle', vol: .42 }); },
+    thud()   { tone({ f0: 170, f1: 85, dur: .11, type: 'sine', vol: .32 }); },
+    tick(k)  { tone({ f0: 500 + k * 220, dur: .07, type: 'triangle', vol: .22 }); },
+    warn(n)  { tone({ f0: 620 + n * 70, dur: .07, type: 'square', vol: .06 }); },
+    spring() { tone({ f0: 240, f1: 920, dur: .26, type: 'square', vol: .1 }); tone({ f0: 160, f1: 70, dur: .12, type: 'triangle', vol: .3 }); },
+    chime(n) {
+      const f = notes[Math.min(n, notes.length - 1)];
+      tone({ f0: f, dur: .22, vol: .26 });
+      tone({ f0: f * 1.5, dur: .28, vol: .22, delay: .07 });
+      tone({ f0: f * 2, dur: .36, vol: .18, type: 'triangle', delay: .14 });
+    },
+    splash() {
+      if (!ac || muted) return;
+      const len = Math.floor(ac.sampleRate * .6), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+      const src = ac.createBufferSource(); src.buffer = buf;
+      const f = ac.createBiquadFilter(); f.type = 'lowpass';
+      const t0 = ac.currentTime;
+      f.frequency.setValueAtTime(2600, t0); f.frequency.exponentialRampToValueAtTime(280, t0 + .5);
+      const g = ac.createGain(); g.gain.setValueAtTime(.55, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .55);
+      src.connect(f); f.connect(g); g.connect(master); src.start(t0);
+      tone({ f0: 300, f1: 90, dur: .3, type: 'sine', vol: .2 });
+    }
+  };
+})();
+
+/* ======================================================================
+   Canvas / view
+   ====================================================================== */
+const W = 420;               // logical play-field width
+const ROW_MIN = 118, ROW_VAR = 36;
+const SEAL_SCREEN = 0.68;    // seal sits at 68% of screen height
+const STEER = 0.28;          // fraction of the horizontal gap left uncorrected by in-air steering
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const safeEl = document.getElementById('safe');
+let dpr = 1, s = 1, offX = 0, VH = 720, cw = 0, ch = 0, bgGrad = null, safeTop = 0;
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  cw = window.innerWidth; ch = window.innerHeight;
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  s = Math.min(cw / W, ch / 720);
+  offX = (cw - W * s) / 2;
+  VH = ch / s;
+  safeTop = safeEl.offsetHeight || 0;
+  bgGrad = ctx.createLinearGradient(0, 0, 0, ch);
+  bgGrad.addColorStop(0, '#0f4c5c'); bgGrad.addColorStop(1, '#1f8a70');
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ======================================================================
+   Game state
+   ====================================================================== */
+const menuEl = document.getElementById('menu'), overEl = document.getElementById('over');
+let state = 'menu';          // menu | playing | over
+let pads = new Map(), nextIdx = 0, lastPad = null;
+let seal, camY = 0, score = 0, combo = 1, best = 0, time = 0, held = false, shake = 0, jumps = 0;
+let particles = [], ripples = [], popups = [];
+try { best = parseInt(localStorage.getItem('sealLeapBest') || '0', 10) || 0; } catch (e) {}
+document.getElementById('bestMenu').textContent = best;
+
+const bubbles = Array.from({ length: 26 }, () => ({
+  x: Math.random(), y0: Math.random() * 1200, v: 8 + Math.random() * 28,
+  r: 2 + Math.random() * 6, par: .15 + Math.random() * .6
+}));
+const blobs = Array.from({ length: 7 }, (_, i) => ({
+  x: ((i * 137) % 100) / 100, y0: i * 190, r: 50 + ((i * 29) % 70), par: .08 + i * .03
+}));
+const fish = Array.from({ length: 6 }, (_, i) => ({
+  x0: Math.random() * 600, y0: Math.random() * 1000, v: (14 + Math.random() * 22) * (i % 2 ? 1 : -1),
+  sz: 9 + Math.random() * 10, par: .25 + Math.random() * .4
+}));
+
+function genRow() {
+  const i = nextIdx++;
+  const y = lastPad ? lastPad.y - (ROW_MIN + Math.random() * ROW_VAR) : 0;
+  let type = 'standard';
+  if (i >= 3) {
+    const r = Math.random(), iceP = Math.min(.26, .05 + i * .005), spP = .13;
+    if (r < iceP) type = 'ice'; else if (r < iceP + spP) type = 'spring';
+    if (type === 'ice' && lastPad && lastPad.type === 'ice') type = 'standard';
+  }
+  const w = type === 'spring' ? 98 : type === 'ice' ? 114 : Math.max(88, 116 - i * .6);
+  let vx = 0;
+  if (i > 0) {
+    const still = Math.max(.08, .4 - i * .012);
+    if (Math.random() > still) {
+      const sp = (36 + Math.min(i, 60) * 1.9) * (.8 + Math.random() * .5);
+      vx = sp * (Math.random() < .5 ? -1 : 1);
+    }
+  }
+  let x = i === 0 ? W / 2 : w / 2 + 14 + Math.random() * (W - w - 28);
+  // Reachability guarantee: a static pad above a static pad stays within steering range.
+  if (vx === 0 && lastPad && lastPad.vx === 0) {
+    x = clamp(x, lastPad.x - 120, lastPad.x + 120);
+    x = clamp(x, w / 2 + 14, W - w / 2 - 14);
+  }
+  const p = { idx: i, x, y, w, type, vx, state: 'idle', mt: 0, tickN: 0, sink: 0, sq: 0, seen: -1 };
+  pads.set(i, p); lastPad = p; return p;
+}
+function ensureRows() {
+  while (nextIdx < seal.pad.idx + 14) genRow();
+  for (const k of pads.keys()) if (k < seal.pad.idx - 5) pads.delete(k);
+}
+function resetGame() {
+  pads.clear(); nextIdx = 0; lastPad = null;
+  score = 0; combo = 1; held = false; shake = 0; jumps = 0;
+  particles = []; ripples = []; popups = [];
+  const p0 = genRow();
+  seal = { x: p0.x, y: p0.y, pad: p0, off: 0, st: 'idle', hold: 0, k: 1, t: 0, T: .5,
+           x0: 0, xT: 0, y0: 0, y1: 0, arc: 0, tp: null, sx: 1, sy: 1, dead: 0 };
+  ensureRows();
+  camY = seal.y - SEAL_SCREEN * VH;
+}
+
+/* predict where a pad will be after T seconds, including wall bounces */
+function predictX(p, T) {
+  const lo = p.w / 2 + 10, hi = W - p.w / 2 - 10;
+  let x = p.x, v = p.vx, rem = T;
+  for (let n = 0; n < 6 && v !== 0 && rem > 0; n++) {
+    const target = v > 0 ? hi : lo, tt = (target - x) / v;
+    if (tt >= rem) { x += v * rem; rem = 0; }
+    else { x = target; rem -= tt; v = -v; }
+  }
+  return x;
+}
+
+/* ======================================================================
+   Gameplay actions
+   ====================================================================== */
+function minK() { return seal.pad.type === 'spring' ? 2 : 1; }
+function chargeP() { return Math.min(1, seal.hold / 1.1); }
+function chargeK() {
+  const p = chargeP();
+  return Math.max(minK(), 1 + (p >= 1 / 3 ? 1 : 0) + (p >= 2 / 3 ? 1 : 0));
+}
+
+function press() {
+  sfx.init(); held = true;
+  if (state !== 'playing' || !seal) return;
+  if (seal.st === 'idle') { seal.st = 'charging'; seal.hold = 0; seal.k = minK(); }
+}
+function release() {
+  held = false;
+  if (state === 'playing' && seal && seal.st === 'charging') launch();
+}
+function cancelCharge() {
+  held = false;
+  if (state === 'playing' && seal && seal.st === 'charging') seal.st = 'idle';
+}
+
+function launch() {
+  const cur = seal.pad, k = chargeK();
+  while (nextIdx <= cur.idx + k) genRow();
+  const tp = pads.get(cur.idx + k);
+  const spring = cur.type === 'spring';
+  seal.k = k; seal.tp = tp; seal.x0 = seal.x; seal.y0 = seal.y; seal.y1 = tp.y;
+  seal.T = .42 + .1 * k + (spring ? .1 : 0);
+  seal.arc = 50 + 34 * k + (spring ? 40 : 0);
+  // in-air steering: the seal corrects most (not all) of the gap to where the pad will be
+  const pred = predictX(tp, seal.T);
+  seal.xT = clamp(pred + (seal.x - pred) * STEER, 12, W - 12);
+  seal.t = 0; seal.st = 'air'; jumps++;
+  seal.sx = .7; seal.sy = 1.42;
+  if (spring) { cur.sq = 1; sfx.spring(); hap.spring(); shake = Math.max(shake, 3); }
+  else { sfx.pop(); hap.launch(); }
+}
+
+function addPopup(x, y, text, col, size) {
+  popups.push({ x, y, text, col: col || '#fff', size: size || 22, life: 1 });
+}
+function ripple(x, y, col, max) { ripples.push({ x, y, r: 8, life: 1, col, max: max || 60 }); }
+function splash(x, y) {
+  const cols = ['#e0fbfc', '#4cc9f0', '#ffffff'];
+  for (let i = 0; i < 28; i++) {
+    const a = -Math.PI / 2 + (Math.random() - .5) * 1.9, sp = 140 + Math.random() * 280;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1,
+      max: .5 + Math.random() * .45, r: 2 + Math.random() * 4, c: cols[i % 3] });
+  }
+  ripple(x, y, '#e0fbfc', 80); ripple(x, y, '#4cc9f0', 55);
+}
+function sparkle(x, y, col, n) {
+  for (let i = 0; i < (n || 12); i++) {
+    const a = Math.random() * Math.PI * 2, sp = 70 + Math.random() * 130;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * .6 - 60, life: 1,
+      max: .45 + Math.random() * .3, r: 2 + Math.random() * 3, c: col });
+  }
+}
+
+function drown(x, y) {
+  seal.st = 'drown'; seal.dead = 0; seal.x = x; seal.y = y;
+  splash(x, y); sfx.splash(); hap.splash(); shake = 11;
+}
+
+function land() {
+  const tp = seal.tp, dx = seal.xT - tp.x;
+  seal.x = seal.xT;
+  const ok = tp.state !== 'sinking' && tp.state !== 'sunk' && Math.abs(dx) <= tp.w / 2 + 3;
+  if (!ok) { seal.y = tp.y; drown(seal.x, tp.y); return; }
+
+  seal.pad = tp; seal.off = seal.x - tp.x; seal.y = tp.y;
+  seal.st = 'idle'; seal.sx = 1.4; seal.sy = .6;
+  const perfect = Math.abs(dx) <= 18;
+  const close = Math.abs(dx) > tp.w / 2 - 8;
+  let pts;
+  if (perfect) {
+    pts = 2 * combo;
+    addPopup(seal.x, seal.y - 74, '+' + pts + ' Perfect!' + (combo > 1 ? '  x' + combo : ''), '#ffd166', 26);
+    sfx.chime(combo); hap.perfect(combo);
+    ripple(seal.x, seal.y, '#ffd166', 110);
+    sparkle(seal.x, seal.y - 10, '#ffd166', 14 + combo * 3);
+    shake = Math.max(shake, 3 + combo);
+    combo = Math.min(5, combo + 1);
+  } else {
+    pts = 1; combo = 1;
+    addPopup(seal.x, seal.y - 74, close ? '+1 Phew!' : '+1', close ? '#ff8fa3' : '#ffffff', 22);
+    sfx.thud(); if (close) hap.edge(); else hap.land();
+    shake = Math.max(shake, 2);
+  }
+  score += pts;
+  ripple(seal.x, seal.y, '#e0fbfc', 90);
+  ripple(seal.x, seal.y, '#ffffff', 60);
+  sparkle(seal.x, seal.y, '#e0fbfc', 8);
+  if (tp.type === 'spring') { tp.sq = 1; }
+  if (tp.type === 'ice' && tp.state === 'idle') { tp.state = 'melting'; tp.mt = 0; tp.tickN = 0; }
+  ensureRows();
+  if (held) { seal.st = 'charging'; seal.hold = 0; seal.k = minK(); }
+}
+
+function endGame() {
+  state = 'over';
+  const isBest = score > best;
+  if (isBest) { best = score; try { localStorage.setItem('sealLeapBest', String(best)); } catch (e) {} }
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('bestOver').textContent = best;
+  document.getElementById('bestMenu').textContent = best;
+  document.getElementById('newBest').classList.toggle('hidden', !(isBest && score > 0));
+  setTimeout(() => { if (state === 'over') overEl.classList.remove('hidden'); }, 250);
+}
+function startGame() {
+  sfx.init();
+  menuEl.classList.add('hidden'); overEl.classList.add('hidden');
+  resetGame(); state = 'playing';
+}
+document.getElementById('play').addEventListener('click', startGame);
+document.getElementById('retry').addEventListener('click', startGame);
+
+/* ======================================================================
+   Input
+   ====================================================================== */
+cv.addEventListener('pointerdown', e => { e.preventDefault(); press(); });
+window.addEventListener('pointerup', release);
+window.addEventListener('pointercancel', cancelCharge);
+cv.addEventListener('contextmenu', e => e.preventDefault());
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+window.addEventListener('keydown', e => {
+  const isAct = e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'Enter';
+  if (!isAct || (e.target && e.target.tagName === 'BUTTON')) return;
+  e.preventDefault();
+  if (state === 'menu' || (state === 'over' && !overEl.classList.contains('hidden'))) { startGame(); return; }
+  if (!e.repeat && e.code !== 'Enter') press();
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') release();
+});
+window.addEventListener('blur', cancelCharge);
+document.addEventListener('visibilitychange', () => { if (document.hidden) cancelCharge(); });
+
+/* ======================================================================
+   Update
+   ====================================================================== */
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function update(dt) {
+  time += dt;
+  shake *= Math.pow(.0006, dt);
+  if (shake < .05) shake = 0;
+
+  for (const p of pads.values()) {
+    if (p.state !== 'sunk') {
+      p.x += p.vx * dt;
+      const lo = p.w / 2 + 10, hi = W - p.w / 2 - 10;
+      if (p.x < lo) { p.x = lo; p.vx = Math.abs(p.vx); }
+      else if (p.x > hi) { p.x = hi; p.vx = -Math.abs(p.vx); }
+    }
+    if (p.sq > 0) p.sq = Math.max(0, p.sq - dt * 3);
+    if (p.type === 'ice') {
+      if (p.state === 'melting') {
+        p.mt += dt;
+        const n = Math.floor(p.mt / .2);
+        if (n > p.tickN && state === 'playing' && seal.pad === p && (seal.st === 'idle' || seal.st === 'charging')) {
+          p.tickN = n; sfx.warn(n); hap.warn(n);
+        }
+        if (p.mt >= .8) { p.state = 'sinking'; p.sink = 0; }
+      } else if (p.state === 'sinking') {
+        p.sink += dt;
+        if (p.sink >= .45) p.state = 'sunk';
+      }
+    }
+  }
+
+  if (seal) {
+    if (seal.st === 'idle' || seal.st === 'charging') {
+      const pd = seal.pad;
+      seal.x = pd.x + seal.off;
+      seal.y = pd.y + (pd.state === 'sinking' ? pd.sink * 38 : pd.state === 'sunk' ? 20 : 0);
+      if (state === 'playing' && (pd.state === 'sunk' || (pd.state === 'sinking' && pd.sink >= .22))) {
+        drown(seal.x, pd.y + 8);
+      } else {
+        let tsx, tsy;
+        if (seal.st === 'charging' && state === 'playing') {
+          seal.hold += dt;
+          const k = chargeK();
+          if (k > seal.k) { sfx.tick(k); hap.tick(k); }
+          seal.k = k;
+          const p = chargeP(); tsx = 1 + .22 * p; tsy = 1 - .32 * p;
+        } else {
+          const b = Math.sin(time * 3.2); tsx = 1 - .02 * b; tsy = 1 + .028 * b;
+        }
+        const k = Math.min(1, dt * 14);
+        seal.sx += (tsx - seal.sx) * k; seal.sy += (tsy - seal.sy) * k;
+      }
+    } else if (seal.st === 'air') {
+      seal.t += dt;
+      const u = Math.min(1, seal.t / seal.T), e = u * u * (3 - 2 * u);
+      seal.x = seal.x0 + (seal.xT - seal.x0) * e;
+      seal.y = seal.y0 + (seal.y1 - seal.y0) * u - seal.arc * 4 * u * (1 - u);
+      particles.push({ x: seal.x + (Math.random() - .5) * 10, y: seal.y + 4, vx: 0, vy: 0, g: 0,
+        life: 1, max: .32, r: 3.5, c: 'rgba(224,251,252,.75)' });
+      const k = Math.min(1, dt * 7);
+      seal.sx += (1 - seal.sx) * k; seal.sy += (1 - seal.sy) * k;
+      if (u >= 1) land();
+    } else if (seal.st === 'drown') {
+      seal.dead += dt;
+      if (seal.dead > .9 && state === 'playing') endGame();
+    }
+  }
+
+  if (seal) {
+    const ty = (seal.st === 'air' && seal.tp ? seal.tp.y : seal.pad.y) - SEAL_SCREEN * VH;
+    camY += (ty - camY) * Math.min(1, dt * 5);
+  }
+
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i]; r.r += (r.max / .7) * dt; r.life -= dt * 1.4;
+    if (r.life <= 0) ripples.splice(i, 1);
+  }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.life -= dt / p.max;
+    p.vy += (p.g === undefined ? 900 : p.g) * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = popups.length - 1; i >= 0; i--) {
+    const p = popups[i]; p.y -= 55 * dt; p.life -= dt * .9;
+    if (p.life <= 0) popups.splice(i, 1);
+  }
+}
+
+/* ======================================================================
+   Rendering
+   ====================================================================== */
+function ell(x, y, rx, ry, rot) { ctx.beginPath(); ctx.ellipse(x, y, Math.max(.01, rx), Math.max(.01, ry), rot || 0, 0, Math.PI * 2); }
+function rr(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+const mod = (a, n) => ((a % n) + n) % n;
+
+function drawBackground() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, cw, ch);
+  ctx.fillStyle = 'rgba(255,255,255,.045)';
+  for (const b of blobs) {
+    const y = mod(b.y0 - camY * b.par, ch + 260) - 130;
+    ctx.beginPath(); ctx.arc(b.x * cw, y, b.r * s, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.07)';
+  for (const f of fish) {
+    const x = mod(f.x0 + time * f.v * s, cw + 240) - 120, y = mod(f.y0 - camY * f.par, ch + 160) - 80;
+    const dir = f.v > 0 ? 1 : -1;
+    ctx.save(); ctx.translate(x, y); ctx.scale(dir * s, s);
+    ell(0, 0, f.sz * 1.6, f.sz * .8); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-f.sz * 1.3, 0); ctx.lineTo(-f.sz * 2.4, -f.sz * .85); ctx.lineTo(-f.sz * 2.4, f.sz * .85); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = 'rgba(224,251,252,.22)';
+  for (const b of bubbles) {
+    const y = mod(b.y0 - time * b.v - camY * b.par, ch + 60) - 30;
+    ctx.beginPath(); ctx.arc(b.x * cw + Math.sin(time + b.y0) * 6, y, b.r * s, 0, 7); ctx.fill();
+  }
+  if (offX > 2) {
+    ctx.fillStyle = 'rgba(8,30,44,.18)';
+    ctx.fillRect(0, 0, offX, ch); ctx.fillRect(cw - offX, 0, offX, ch);
+  }
+}
+
+function drawWaves() {
+  const left = -offX / s, right = (cw - offX) / s;
+  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,255,255,.07)';
+  const step = 90, y0 = Math.floor(camY / step) * step;
+  for (let y = y0; y < camY + VH + step; y += step) {
+    ctx.beginPath();
+    for (let x = left; x <= right + 20; x += 20) {
+      const yy = y + Math.sin(x * .03 + time * 1.2 + y * .1) * 5;
+      if (x === left) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawPad(p) {
+  if (p.state === 'sunk') return;
+  let alpha = 1, scl = 1;
+  if (p.state === 'sinking') { const k = p.sink / .45; scl = 1 - .35 * k; alpha = 1 - k; }
+  const pop = clamp((time - p.seen) / .35, 0, 1), b = pop - 1;
+  const eo = p.seen < 0 ? 0 : 1 + 2.70158 * b * b * b + 1.70158 * b * b;   // ease-out-back pop-in
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(p.x, p.y); ctx.scale(eo, eo);
+  const sq = p.type === 'spring' ? 1 - .28 * p.sq : 1;
+  const rx = p.w / 2 * scl, ry = 19 * scl * sq;
+  ctx.fillStyle = 'rgba(8,40,52,.32)'; ell(0, 11, rx * 1.02, ry); ctx.fill();
+  let main, rim, ring;
+  if (p.type === 'standard') { main = '#06d6a0'; rim = '#049a75'; ring = '#5be8c3'; }
+  else if (p.type === 'spring') { main = '#4cc9f0'; rim = '#2a9fc9'; ring = '#9be3f7'; }
+  else { main = '#e0fbfc'; rim = '#9fd4e0'; ring = '#ffffff'; }
+  if (p.state === 'melting' && Math.sin(p.mt * Math.PI * 8) > 0) { main = '#ff6b6b'; rim = '#c0392b'; ring = '#ffb3b3'; }
+  ctx.fillStyle = rim; ell(0, 7 * scl, rx, ry); ctx.fill();
+  ctx.fillStyle = main; ell(0, 0, rx, ry); ctx.fill();
+  ctx.lineWidth = 3 * scl; ctx.strokeStyle = ring;
+  ell(0, 0, rx * .62, ry * .62); ctx.stroke();
+  ctx.fillStyle = ring; ell(0, 0, 18 * scl, 7.5 * scl * sq); ctx.fill();
+  if (p.type === 'spring') {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-9, 2); ctx.lineTo(0, -5); ctx.lineTo(9, 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-9, 8); ctx.lineTo(0, 1); ctx.lineTo(9, 8); ctx.stroke();
+  } else if (p.type === 'ice') {
+    ctx.strokeStyle = 'rgba(159,212,224,.9)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-rx * .7, -ry * .3); ctx.lineTo(-rx * .35, ry * .1);
+    ctx.moveTo(rx * .55, -ry * .45); ctx.lineTo(rx * .3, -ry * .05); ctx.lineTo(rx * .45, ry * .35); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSealBody() {
+  const O = '#2b2d42', G = '#e0e6ed';
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.fillStyle = G; ctx.strokeStyle = O; ctx.lineWidth = 3.2;
+  [-1, 1].forEach(d => {
+    ell(d * 19, -18, 6.5, 12, d * .55); ctx.fill(); ctx.stroke();
+    ell(d * 8, -1.5, 8, 4, d * .15); ctx.fill(); ctx.stroke();
+  });
+  const body = () => ell(0, -20, 19, 22), head = () => { ctx.beginPath(); ctx.arc(0, -38, 15, 0, 7); };
+  ctx.strokeStyle = O; ctx.lineWidth = 7; body(); ctx.stroke(); head(); ctx.stroke();
+  ctx.fillStyle = G; body(); ctx.fill(); head(); ctx.fill();
+  ctx.fillStyle = '#f8fafc'; ell(0, -16, 11.5, 15); ctx.fill();
+  ctx.fillStyle = '#ff8fa3'; [-1, 1].forEach(d => { ctx.beginPath(); ctx.arc(d * 11, -34, 4, 0, 7); ctx.fill(); });
+  ctx.fillStyle = '#111';
+  [-1, 1].forEach(d => { ctx.beginPath(); ctx.arc(d * 6.5, -40, 2.8, 0, 7); ctx.fill(); });
+  ctx.fillStyle = '#fff';
+  [-1, 1].forEach(d => { ctx.beginPath(); ctx.arc(d * 6.5 + .9, -41, .9, 0, 7); ctx.fill(); });
+  ctx.fillStyle = O; ell(0, -34.5, 4.5, 3); ctx.fill();
+  ctx.strokeStyle = O; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(0, -32); ctx.lineTo(0, -30); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-2.5, -30, 2.5, 0, Math.PI * .9); ctx.stroke();
+  ctx.beginPath(); ctx.arc(2.5, -30, 2.5, Math.PI * .1, Math.PI); ctx.stroke();
+}
+
+function drawSeal() {
+  let alpha = 1, yoff = 0, scl = 1, tilt = 0;
+  if (seal.st === 'air') {
+    const u = Math.min(1, seal.t / seal.T), h = seal.arc * 4 * u * (1 - u);
+    const gy = seal.y0 + (seal.y1 - seal.y0) * u, k = 1 - Math.min(1, h / (seal.arc * 1.6)) * .5;
+    ctx.fillStyle = 'rgba(8,40,52,.28)'; ell(seal.x, gy + 4, 20 * k, 6 * k); ctx.fill();
+    tilt = Math.sin(u * Math.PI * 2) * .1 * (seal.xT >= seal.x0 ? 1 : -1);
+  } else if (seal.st === 'drown') {
+    const k = clamp(seal.dead / .9, 0, 1);
+    alpha = 1 - k; yoff = k * 34; scl = 1 - .25 * k;
+  }
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.translate(seal.x, seal.y + yoff - 2);
+  ctx.rotate(tilt); ctx.scale(seal.sx * scl, seal.sy * scl);
+  drawSealBody(); ctx.restore();
+}
+
+function drawChargeUI() {
+  if (state !== 'playing' || seal.st !== 'charging') return;
+  const p = chargeP(), cx = seal.x, cy = seal.y + 6;
+  const cols = ['#4cc9f0', '#06d6a0', '#ffd166'];
+  const a0 = Math.PI * .12, a1 = Math.PI * .88;
+  ctx.lineCap = 'round'; ctx.lineWidth = 7;
+  for (let i = 0; i < 3; i++) {
+    const r = 32 + i * 14;
+    ctx.strokeStyle = 'rgba(255,255,255,.18)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1); ctx.stroke();
+    const frac = clamp(p * 3 - i, 0, 1);
+    if (frac > 0) {
+      ctx.strokeStyle = cols[i];
+      ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + (a1 - a0) * frac); ctx.stroke();
+    }
+  }
+  const tp = pads.get(seal.pad.idx + seal.k);
+  if (tp) {
+    const pulse = .55 + .35 * Math.sin(time * 10);
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,' + pulse + ')'; ctx.lineWidth = 3;
+    ctx.setLineDash([9, 7]); ell(tp.x, tp.y, tp.w / 2 + 9, 27); ctx.stroke(); ctx.restore();
+  }
+}
+
+function drawHint() {
+  if (state !== 'playing' || jumps >= 2 || seal.st === 'air' || seal.st === 'drown') return;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '900 17px Nunito, Montserrat, system-ui, sans-serif';
+  const bob = Math.sin(time * 4) * 3, y = seal.y + 70 + bob;
+  ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(15,50,64,.6)';
+  const t1 = seal.st === 'charging' ? 'Release to leap!' : 'TAP to leap  •  HOLD for longer jumps';
+  ctx.strokeText(t1, W / 2, y); ctx.fillStyle = '#fff'; ctx.fillText(t1, W / 2, y);
+  ctx.restore();
+}
+
+function drawHUD() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (state === 'menu') return;
+  const top = 62 + safeTop;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '900 64px Nunito, Montserrat, system-ui, sans-serif';
+  ctx.lineWidth = 8; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(15,50,64,.55)';
+  ctx.strokeText(score, cw / 2, top); ctx.fillStyle = '#fff'; ctx.fillText(score, cw / 2, top);
+  ctx.textAlign = 'left'; ctx.font = '900 14px Nunito, Montserrat, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText('BEST ' + Math.max(best, score), 16, 28 + safeTop);
+  if (combo > 1) {
+    const w = 118, h = 30, x = cw / 2 - w / 2, y = top + 42;
+    ctx.fillStyle = '#ffd166'; rr(x, y, w, h, 15); ctx.fill();
+    ctx.fillStyle = '#2b2d42'; ctx.textAlign = 'center'; ctx.font = '900 16px Nunito, Montserrat, system-ui, sans-serif';
+    ctx.fillText('COMBO x' + combo, cw / 2, y + h / 2 + 1);
+  }
+}
+
+function render() {
+  drawBackground();
+  const shx = shake ? (Math.random() - .5) * shake * 2 : 0, shy = shake ? (Math.random() - .5) * shake * 2 : 0;
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, (offX + shx) * dpr, (-camY * s + shy) * dpr);
+  drawWaves();
+
+  for (const r of ripples) {
+    ctx.globalAlpha = clamp(r.life, 0, 1) * .85; ctx.strokeStyle = r.col; ctx.lineWidth = 3.5 * r.life + .5;
+    ell(r.x, r.y + 2, r.r, r.r * .38); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const vis = [];
+  for (const p of pads.values()) {
+    if (p.y > camY - 90 && p.y < camY + VH + 90) { if (p.seen < 0) p.seen = time; vis.push(p); }
+  }
+  vis.sort((a, b) => a.y - b.y);
+  for (const p of vis) drawPad(p);
+
+  if (seal) { drawChargeUI(); drawSeal(); drawHint(); }
+
+  for (const p of particles) {
+    ctx.globalAlpha = clamp(p.life, 0, 1); ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (.4 + .6 * p.life), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (const p of popups) {
+    ctx.globalAlpha = clamp(p.life * 1.6, 0, 1);
+    ctx.font = '900 ' + p.size + 'px Nunito, Montserrat, system-ui, sans-serif';
+    ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(15,50,64,.7)';
+    const sc = 1 + .25 * Math.max(0, p.life - .8) * 5;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(sc, sc);
+    ctx.strokeText(p.text, 0, 0); ctx.fillStyle = p.col; ctx.fillText(p.text, 0, 0); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  drawHUD();
+}
+
+/* ======================================================================
+   Main loop
+   ====================================================================== */
+let last = 0;
+function frame(ts) {
+  const dt = Math.min(.033, (ts - last) / 1000 || .016); last = ts;
+  update(dt); render();
+  requestAnimationFrame(frame);
+}
+resetGame();
+requestAnimationFrame(t => { last = t; frame(t); });
+})();
+</script>
+</body>
+</html>
